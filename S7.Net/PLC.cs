@@ -16,6 +16,7 @@ namespace S7.Net
         public CpuType CPU { get; set; }
         public Int16 Rack { get; set; }
         public Int16 Slot { get; set; }
+        //TODO: *useless, better add UniqueID for multiple connections
         public string Name { get; set; }
         public object Tag { get; set; }
 
@@ -31,6 +32,7 @@ namespace S7.Net
                     PingReply result;
                     try
                     {
+                        //TODO: *multiple connections / Ping will result in Denial of Service so prevent CPU Disconnect with 100ms delays between Pings
                         result = ping.Send(IP);
                     }
                     catch (PingException)
@@ -55,6 +57,7 @@ namespace S7.Net
                 {
                     if (_mSocket == null)
                         return false;
+                    //TODO: Think there is nor need for Socket.Poll *instead KeepAlive activ
                     return !((_mSocket.Poll(1000, SelectMode.SelectRead) && (_mSocket.Available == 0)) || !_mSocket.Connected);
                 }
                 catch { return false; }
@@ -88,189 +91,206 @@ namespace S7.Net
         }
 
         public ErrorCode Open()
-	    {
-		    byte[] bReceive = new byte[256];
+        {
+            //there is no need to receive 256 byte
+            //byte[] bReceive = new byte[256];
 
-		    try 
+            //try catch already implented
+            // check if available
+            if (!IsAvailable)
             {
-			    // check if available
-                if (!IsAvailable)
-                {
-                    throw new Exception();
-                }
+                LastErrorCode = ErrorCode.IPAddressNotAvailable;
+                LastErrorString = string.Format("Destination IP-Address '{0}' is not available!", IP);
+                return LastErrorCode;
             }
-		    catch  
+
+            try
             {
-			    LastErrorCode = ErrorCode.IPAddressNotAvailable;
-			    LastErrorString = string.Format("Destination IP-Address '{0}' is not available!", IP);
-			    return LastErrorCode;
-		    }
+                // open the channel
+                _mSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
-		    try {
-			    // open the channel
-			    _mSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                //keep Socket alive
+                _mSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, 200);
 
-			    _mSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReceiveTimeout, 1000);
-			    _mSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.SendTimeout, 1000);
+                _mSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReceiveTimeout, 1000);
+                _mSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.SendTimeout, 1000);
 
-			    IPEndPoint server = new IPEndPoint(IPAddress.Parse(IP), 102);
-			    _mSocket.Connect(server);
-		    }
-		    catch (Exception ex) {
-			    LastErrorCode = ErrorCode.ConnectionError;
-			    LastErrorString = ex.Message;
-			    return ErrorCode.ConnectionError;
-		    }
+                //TODO: implement SocketOption Read/Write Buffer = 0 to prevent outdated Data
 
-		    try 
+                IPEndPoint server = new IPEndPoint(IPAddress.Parse(IP), 102);
+                _mSocket.Connect(server);
+            }
+            catch (SocketException ex)
+            {//performance improvement: first try catch SocketException first
+                LastErrorCode = ErrorCode.ConnectionError;
+                LastErrorString = ex.Message;
+                return ErrorCode.ConnectionError;
+            }
+            catch (Exception ex)
             {
-			    byte[] bSend1 = { 3, 0, 0, 22, 17, 224, 0, 0, 0, 46, 0, 193, 2, 1, 0, 194, 2, 3, 0, 192, 1, 9 };
+                LastErrorCode = ErrorCode.ConnectionError;
+                LastErrorString = ex.Message;
+                return ErrorCode.ConnectionError;
+            }
 
-			    switch (CPU) {
-				    case CpuType.S7200:
-					    //S7200: Chr(193) & Chr(2) & Chr(16) & Chr(0) 'Eigener Tsap
-					    bSend1[11] = 193;
-					    bSend1[12] = 2;
-					    bSend1[13] = 16;
-					    bSend1[14] = 0;
-					    //S7200: Chr(194) & Chr(2) & Chr(16) & Chr(0) 'Fremder Tsap
-					    bSend1[15] = 194;
-					    bSend1[16] = 2;
-					    bSend1[17] = 16;
-					    bSend1[18] = 0;
-					    break;
+            //TODO: Bad error handling
+            try
+            {
+                byte[] bSend1 = { 3, 0, 0, 22, 17, 224, 0, 0, 0, 46, 0, 193, 2, 1, 0, 194, 2, 3, 0, 192, 1, 9 };
+
+                //TODO: use bSend1[14] for UniqueID (multiple connections)
+                switch (CPU)
+                {
+                    case CpuType.S7200:
+                        //S7200: Chr(193) & Chr(2) & Chr(16) & Chr(0) 'Eigener Tsap
+                        bSend1[11] = 193;
+                        bSend1[12] = 2;
+                        bSend1[13] = 16;
+                        bSend1[14] = 0;
+                        //S7200: Chr(194) & Chr(2) & Chr(16) & Chr(0) 'Fremder Tsap
+                        bSend1[15] = 194;
+                        bSend1[16] = 2;
+                        bSend1[17] = 16;
+                        bSend1[18] = 0;
+                        break;
                     case CpuType.S71200:
-				    case CpuType.S7300:
-					    //S7300: Chr(193) & Chr(2) & Chr(1) & Chr(0)  'Eigener Tsap
-					    bSend1[11] = 193;
-					    bSend1[12] = 2;
-					    bSend1[13] = 1;
-					    bSend1[14] = 0;
-					    //S7300: Chr(194) & Chr(2) & Chr(3) & Chr(2)  'Fremder Tsap
-					    bSend1[15] = 194;
-					    bSend1[16] = 2;
-					    bSend1[17] = 3;
-					    bSend1[18] = (byte)(Rack * 2 * 16 + Slot);
-					    break;
-				    case CpuType.S7400:
-					    //S7400: Chr(193) & Chr(2) & Chr(1) & Chr(0)  'Eigener Tsap
-					    bSend1[11] = 193;
-					    bSend1[12] = 2;
-					    bSend1[13] = 1;
-					    bSend1[14] = 0;
-					    //S7400: Chr(194) & Chr(2) & Chr(3) & Chr(3)  'Fremder Tsap
-					    bSend1[15] = 194;
-					    bSend1[16] = 2;
-					    bSend1[17] = 3;
+                    case CpuType.S7300:
+                        //S7300: Chr(193) & Chr(2) & Chr(1) & Chr(0)  'Eigener Tsap
+                        bSend1[11] = 193;
+                        bSend1[12] = 2;
+                        bSend1[13] = 1;
+                        bSend1[14] = 0;
+                        //S7300: Chr(194) & Chr(2) & Chr(3) & Chr(2)  'Fremder Tsap
+                        bSend1[15] = 194;
+                        bSend1[16] = 2;
+                        bSend1[17] = 3;
+                        bSend1[18] = (byte)(Rack * 2 * 16 + Slot);
+                        break;
+                    case CpuType.S7400:
+                        //S7400: Chr(193) & Chr(2) & Chr(1) & Chr(0)  'Eigener Tsap
+                        bSend1[11] = 193;
+                        bSend1[12] = 2;
+                        bSend1[13] = 1;
+                        bSend1[14] = 0;
+                        //S7400: Chr(194) & Chr(2) & Chr(3) & Chr(3)  'Fremder Tsap
+                        bSend1[15] = 194;
+                        bSend1[16] = 2;
+                        bSend1[17] = 3;
                         bSend1[18] = (byte)(Rack * 2 * 16 + Slot);
                         break;
                     case CpuType.S71500:
-				        // Eigener Tsap
+                        // Eigener Tsap
                         bSend1[11] = 193;
                         bSend1[12] = 2;
-                        bSend1[13] = 0x10;
-                        bSend1[14] = 0x2;
+                        bSend1[13] = 16; //why hex?
+                        bSend1[14] = 2;  //why hex?
                         // Fredmer Tsap
                         bSend1[15] = 194;
                         bSend1[16] = 2;
-                        bSend1[17] = 0x3;
+                        bSend1[17] = 3; //why hex?
                         bSend1[18] = (byte)(Rack * 2 * 16 + Slot);
                         break;
-				    default:
-					    return ErrorCode.WrongCPU_Type;
-			    }
+                    default:
+                        return ErrorCode.WrongCPU_Type;
+                }
 
-			    _mSocket.Send(bSend1, 22, SocketFlags.None);
-			    if (_mSocket.Receive(bReceive, 22, SocketFlags.None) != 22)
-			    {
-			        throw new Exception(ErrorCode.WrongNumberReceivedBytes.ToString());
-			    } 
+                byte[] bReceive = new byte[32];
 
-			    byte[] bsend2 = { 3, 0, 0, 25, 2, 240, 128, 50, 1, 0, 0, 255, 255, 0, 8, 0, 0, 240, 0, 0, 3, 0, 3, 1, 0 };
-			    _mSocket.Send(bsend2, 25, SocketFlags.None);
+                _mSocket.Send(bSend1, 22, SocketFlags.None);
+                if (_mSocket.Receive(bReceive, 22, SocketFlags.None) != 22)
+                {
+                    throw new Exception(ErrorCode.WrongNumberReceivedBytes.ToString());
+                }
 
-			    if (_mSocket.Receive(bReceive, 27, SocketFlags.None) != 27)
-			    {
-			        throw new Exception(ErrorCode.WrongNumberReceivedBytes.ToString());
-			    } 
-		    }
-		    catch 
-            {
-			    LastErrorCode = ErrorCode.ConnectionError;
-			    LastErrorString = string.Format("Couldn't establish the connection to {0}!", IP);
-			    return ErrorCode.ConnectionError;
-		    }
+                byte[] bsend2 = { 3, 0, 0, 25, 2, 240, 128, 50, 1, 0, 0, 255, 255, 0, 8, 0, 0, 240, 0, 0, 3, 0, 3, 1, 0 };
+                _mSocket.Send(bsend2, 25, SocketFlags.None);
 
-		    return ErrorCode.NoError;
-	    }
-
-	    public void Close()
-	    {
-		    if (_mSocket != null && _mSocket.Connected) 
-            {
-			    _mSocket.Close();
+                if (_mSocket.Receive(bReceive, 27, SocketFlags.None) != 27)
+                {
+                    throw new Exception(ErrorCode.WrongNumberReceivedBytes.ToString());
+                }
             }
-	    }
+            catch
+            {
+                LastErrorCode = ErrorCode.ConnectionError;
+                LastErrorString = string.Format("Couldn't establish the connection to {0}!", IP);
+                return ErrorCode.ConnectionError;
+            }
+
+            return ErrorCode.NoError;
+        }
+
+        public void Close()
+        {
+            //close connection harmfull
+            if (this._mSocket != null && _mSocket.Connected)
+            {
+                this._mSocket.Shutdown(SocketShutdown.Both);
+                this._mSocket.Disconnect(false);
+                this._mSocket.Close(100);
+            }
+        }
 
         public byte[] ReadBytes(DataType dataType, int DB, int startByteAdr, int count)
         {
+            //TODO: implement check count <= PDU Size - 32 and throw exception
             byte[] bytes = new byte[count];
 
-	        try
-	        {
-		        // first create the header
-		        int packageSize = 31;
-		        Types.ByteArray package = new Types.ByteArray(packageSize);
+            try
+            {
+                // first create the header
+                int packageSize = 31;
+                Types.ByteArray package = new Types.ByteArray(packageSize);
 
-		        package.Add(new byte[] {0x03, 0x00, 0x00});
-		        package.Add((byte) packageSize);
-		        package.Add(new byte[]
-		        {0x02, 0xf0, 0x80, 0x32, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x04, 0x01, 0x12, 0x0a, 0x10});
-		        // package.Add(0x02);  // datenart
-		        switch (dataType)
-		        {
-			        case DataType.Timer:
-			        case DataType.Counter:
-				        package.Add((byte) dataType);
-				        break;
-			        default:
-				        package.Add(0x02);
-				        break;
-		        }
+                package.Add(new byte[] { 0x03, 0x00, 0x00 });
+                package.Add((byte)packageSize);
+                package.Add(new byte[] { 0x02, 0xf0, 0x80, 0x32, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x04, 0x01, 0x12, 0x0a, 0x10 });
+                //switch datatype dynamicly
+                switch (dataType)
+                {
+                    case DataType.Timer:
+                    case DataType.Counter:
+                        package.Add((byte)dataType);
+                        break;
+                    default:
+                        package.Add(0x02);
+                        break;
+                }
 
-		        package.Add(Types.Word.ToByteArray((ushort) (count)));
-		        package.Add(Types.Word.ToByteArray((ushort) (DB)));
-		        package.Add((byte) dataType);
-		        package.Add((byte) 0);
-		        switch (dataType)
-		        {
-			        case DataType.Timer:
-			        case DataType.Counter:
-				        package.Add(Types.Word.ToByteArray((ushort) (startByteAdr)));
-				        break;
-			        default:
-				        package.Add(Types.Word.ToByteArray((ushort) ((startByteAdr)*8)));
-				        break;
-		        }
+                package.Add(Types.Word.ToByteArray((ushort)(count)));
+                package.Add(Types.Word.ToByteArray((ushort)(DB)));
+                package.Add((byte)dataType);
+                package.Add((byte)0);
+                switch (dataType)
+                {
+                    case DataType.Timer:
+                    case DataType.Counter:
+                        package.Add(Types.Word.ToByteArray((ushort)(startByteAdr)));
+                        break;
+                    default:
+                        package.Add(Types.Word.ToByteArray((ushort)((startByteAdr) * 8)));
+                        break;
+                }
 
-		        _mSocket.Send(package.array, package.array.Length, SocketFlags.None);
+                _mSocket.Send(package.array, package.array.Length, SocketFlags.None);
 
-		        byte[] bReceive = new byte[512];
-		        int numReceived = _mSocket.Receive(bReceive, 512, SocketFlags.None);
-		        if (bReceive[21] != 0xff) throw new Exception(ErrorCode.WrongNumberReceivedBytes.ToString());
+                //TODO: implement support for dynamic PDU Size (208+32 / 448+32 / 928+32)
+                byte[] bReceive = new byte[512];
+                int numReceived = _mSocket.Receive(bReceive, 512, SocketFlags.None);
+                if (bReceive[21] != 0xff) throw new Exception(ErrorCode.WrongNumberReceivedBytes.ToString());
 
-		        for (int cnt = 0; cnt < count; cnt++)
-			        bytes[cnt] = bReceive[cnt + 25];
+                for (int cnt = 0; cnt < count; cnt++)
+                    bytes[cnt] = bReceive[cnt + 25];
 
-		        return bytes;
-	        }
-	        catch (SocketException socketException)
-	        {
-				LastErrorCode = ErrorCode.WriteData;
-				LastErrorString = socketException.Message;
-				return null;
-	        }
-            catch(Exception exc)
+                return bytes;
+            }
+            catch (SocketException socketException)
+            {
+                LastErrorCode = ErrorCode.WriteData;
+                LastErrorString = socketException.Message;
+                return null;
+            }
+            catch (Exception exc)
             {
                 LastErrorCode = ErrorCode.WriteData;
                 LastErrorString = exc.Message;
@@ -403,17 +423,17 @@ namespace S7.Net
                                 byte obj = (byte)Read(DataType.DataBlock, mDB, dbIndex, VarType.Byte, 1);
                                 return obj;
                             case "DBW":
-								UInt16 objI = (UInt16)Read(DataType.DataBlock, mDB, dbIndex, VarType.Word, 1);
+                                UInt16 objI = (UInt16)Read(DataType.DataBlock, mDB, dbIndex, VarType.Word, 1);
                                 return objI;
                             case "DBD":
-								UInt32 objU = (UInt32)Read(DataType.DataBlock, mDB, dbIndex, VarType.DWord, 1);
+                                UInt32 objU = (UInt32)Read(DataType.DataBlock, mDB, dbIndex, VarType.DWord, 1);
                                 return objU;
                             case "DBX":
                                 mByte = dbIndex;
                                 mBit = int.Parse(strings[2]);
                                 if (mBit > 7) throw new Exception();
                                 byte obj2 = (byte)Read(DataType.DataBlock, mDB, mByte, VarType.Byte, 1);
-								objBoolArray = new BitArray(new byte[] { obj2 });
+                                objBoolArray = new BitArray(new byte[] { obj2 });
                                 return objBoolArray[mBit];
                             default:
                                 throw new Exception();
@@ -491,11 +511,11 @@ namespace S7.Net
                         mBit = int.Parse(txt2.Substring(txt2.IndexOf(".") + 1));
                         if (mBit > 7) throw new Exception();
                         var obj3 = (byte)Read(mDataType, 0, mByte, VarType.Byte, 1);
-						objBoolArray = new BitArray(new byte[]{obj3});
+                        objBoolArray = new BitArray(new byte[] { obj3 });
                         return objBoolArray[mBit];
                 }
             }
-            catch 
+            catch
             {
                 LastErrorCode = ErrorCode.WrongVarFormat;
                 LastErrorString = "The variable'" + variable + "' could not be read. Please check the syntax and try again.";
@@ -529,7 +549,8 @@ namespace S7.Net
 
         public ErrorCode WriteBytes(DataType dataType, int db, int startByteAdr, byte[] value)
         {
-            byte[] bReceive = new byte[513];
+            //TODO: implement support for dynamic PDU Size (208+32 / 448+32 / 928+32
+            byte[] bReceive = new byte[512];
             int varCount = 0;
 
             try
@@ -539,6 +560,7 @@ namespace S7.Net
                 int packageSize = 35 + value.Length;
                 Types.ByteArray package = new Types.ByteArray(packageSize);
 
+                //TODO: dirty mixed dez/hex
                 package.Add(new byte[] { 3, 0, 0 });
                 package.Add((byte)packageSize);
                 package.Add(new byte[] { 2, 0xf0, 0x80, 0x32, 1, 0, 0 });
@@ -645,14 +667,14 @@ namespace S7.Net
                 switch (txt.Substring(0, 2))
                 {
                     case "DB":
-                        string[] strings = txt.Split(new char[]{'.'});
+                        string[] strings = txt.Split(new char[] { '.' });
                         if (strings.Length < 2)
                             throw new Exception();
 
                         mDB = int.Parse(strings[0].Substring(2));
                         string dbType = strings[1].Substring(0, 3);
-                        int dbIndex = int.Parse(strings[1].Substring(3));                       
-                       
+                        int dbIndex = int.Parse(strings[1].Substring(3));
+
                         switch (dbType)
                         {
                             case "DBB":
@@ -758,14 +780,14 @@ namespace S7.Net
                                 // Counter
                                 return Write(DataType.Counter, 0, int.Parse(txt.Substring(1)), (short)value);
                             default:
-                                throw new Exception(string.Format("Unknown variable type {0}.",txt.Substring(0,1)));
+                                throw new Exception(string.Format("Unknown variable type {0}.", txt.Substring(0, 1)));
                         }
 
                         addressLocation = txt.Substring(1);
                         int decimalPointIndex = addressLocation.IndexOf(".");
                         if (decimalPointIndex == -1)
                         {
-                            throw new Exception(string.Format("Cannot parse variable {0}. Input, Output, Memory Address, Timer, and Counter types require bit-level addressing (e.g. I0.1).",addressLocation));
+                            throw new Exception(string.Format("Cannot parse variable {0}. Input, Output, Memory Address, Timer, and Counter types require bit-level addressing (e.g. I0.1).", addressLocation));
                         }
 
                         mByte = int.Parse(addressLocation.Substring(0, decimalPointIndex));
@@ -784,7 +806,7 @@ namespace S7.Net
                         return Write(mDataType, 0, mByte, (byte)_byte);
                 }
             }
-            catch 
+            catch
             {
                 LastErrorCode = ErrorCode.WrongVarFormat;
                 LastErrorString = "The variable'" + variable + "' could not be parsed. Please check the syntax and try again.";
