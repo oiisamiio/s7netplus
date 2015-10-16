@@ -6,10 +6,11 @@ namespace S7.Net.Types
     {
         public static bool GetValue(byte value, int bit)
         {
-            if ((value & (int)Math.Pow(2, bit)) != 0)
-                return true;
-            else
-                return false;
+            return (1 == ((value >> bit) & 1));
+            //if ((value & (int)Math.Pow(2, bit)) != 0)
+            //    return true;
+            //else
+            //    return false;
         }
 
         public static byte SetBit(byte value, int bit)

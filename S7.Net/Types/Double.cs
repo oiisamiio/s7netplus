@@ -6,6 +6,7 @@ namespace S7.Net.Types
     {
         // publics
         #region FromByteArray
+
         public static double FromByteArray(byte[] bytes)
         {
             byte v1 = bytes[0];
@@ -41,8 +42,11 @@ namespace S7.Net.Types
                 return Math.Pow((-1), vz) * Math.Pow(2, (exd - 127)) * mantisse;
             }
         }
+
         #endregion
+
         #region FromDWord
+
         public static double FromDWord(Int32 value)
         {
             byte[] b = DInt.ToByteArray(value);
@@ -59,6 +63,7 @@ namespace S7.Net.Types
         #endregion
 
         #region ToByteArray
+
         public static byte[] ToByteArray(double value)
         {
             double wert = (double)value;
@@ -109,25 +114,34 @@ namespace S7.Net.Types
         {
             ByteArray arr = new ByteArray();
             foreach (double val in value)
+            {
                 arr.Add(ToByteArray(val));
+            }
             return arr.array;
         }
+
         #endregion
+
         #region ToArray
+
         public static double[] ToArray(byte[] bytes)
         {
             double[] values = new double[bytes.Length / 4];
 
             int counter = 0;
             for (int cnt = 0; cnt < bytes.Length / 4; cnt++)
+            {
                 values[cnt] = FromByteArray(new byte[] { bytes[counter++], bytes[counter++], bytes[counter++], bytes[counter++] });
+            }
 
             return values;
         }
+
         #endregion
         
         // privates
         #region ValToBinString
+
         private static string ValToBinString(byte value)
         {
             string txt = "";
@@ -141,8 +155,11 @@ namespace S7.Net.Types
             }
             return txt;
         }
+
         #endregion
+
         #region BinStringToByte
+
         private static byte? BinStringToByte(string txt)
         {
             int cnt = 0;
@@ -161,6 +178,7 @@ namespace S7.Net.Types
             }
             return null;
         }
+
         #endregion
     }
 }

@@ -13,10 +13,12 @@ namespace S7.Net.Types
         {
             double numBytes = 0.0;                       
             var properties = classType.GetProperties();
+
             foreach (var property in properties)
             {
                 numBytes += CalculateBytes(property.PropertyType.Name);
             }
+
             return (int)numBytes;
         }
 

@@ -5,6 +5,49 @@ namespace S7.Net
 {
     public static class Conversion
     {
+        /// <summary>
+        /// Convert S7 Byte Array to x86 Byte Array
+        /// </summary>
+        /// <param name="value">byte array</param>
+        /// <param name="dimension">array length</param>
+        /// <returns></returns>
+        public static byte[] SwapByte(this byte[] value, int dimension)
+        {
+            Types.ByteArray swapByte = new Types.ByteArray();
+
+            if (dimension > 1)
+            {
+                swapByte.Add(value[1]);
+                swapByte.Add(value[0]);
+            }
+
+            if (dimension > 3)
+            {
+                swapByte.Add(value[3]);
+                swapByte.Add(value[2]);
+            }
+
+            return swapByte.array;
+        }
+
+        //TODO: performance improvement: replace Math.Pow
+        private static int IntPow(this int x, int y)
+        {
+            int result = 1;
+
+            while (y != 0)
+            {
+                if ((y & 1) == 1)
+                {
+                    result *= x;
+                }
+                x *= x;
+                y >>= 1;
+            }
+
+            return result;
+        }
+
         public static int BinStringToInt32(this string txt)
         {
             int cnt = 0;
