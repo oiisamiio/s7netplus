@@ -601,6 +601,7 @@ namespace S7.Net
         {
             byte[] package = null;
 
+            //TODO: performance improvement, implement typeof() instead  GetType()
             switch (value.GetType().Name)
             {
                 case "Byte":
@@ -662,6 +663,7 @@ namespace S7.Net
             string txt = variable.ToUpper();
             txt = txt.Replace(" ", ""); // Remove spaces
 
+            //TODO: implement typeof(value)
             try
             {
                 switch (txt.Substring(0, 2))
