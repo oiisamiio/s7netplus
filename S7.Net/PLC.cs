@@ -262,7 +262,18 @@ namespace S7.Net
                 package.Add(Types.Word.ToByteArray((ushort)(count)));
                 package.Add(Types.Word.ToByteArray((ushort)(DB)));
                 package.Add((byte)dataType);
-                package.Add((byte)0);
+                
+                //TODO: ugly way to ensure addresses like : DB999.8192 are readable
+                if (startByteAdr > 8191)
+                {
+                    package.Add((byte)1);
+                }
+                else
+                {
+                    package.Add((byte)0);
+                }
+                    
+
                 switch (dataType)
                 {
                     case DataType.Timer:
@@ -574,7 +585,18 @@ namespace S7.Net
                 package.Add(Types.Word.ToByteArray((ushort)varCount));
                 package.Add(Types.Word.ToByteArray((ushort)(db)));
                 package.Add((byte)dataType);
-                package.Add((byte)0);
+                
+                //TODO: ugly way to ensure addresses like : DB999.8192 are writable
+                if (startByteAdr > 8191)
+                {
+                    package.Add((byte)1);
+                }
+                else
+                {
+                    package.Add((byte)0);
+                }
+
+
                 package.Add(Types.Word.ToByteArray((ushort)(startByteAdr * 8)));
                 package.Add(new byte[] { 0, 4 });
                 package.Add(Types.Word.ToByteArray((ushort)(varCount * 8)));
